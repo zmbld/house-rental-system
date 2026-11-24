@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-house-heart"></i> 民宿预订平台
+            </a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link active text-warning" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight"></ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <div class="col-md-2 bg-light sidebar py-3" style="min-height: calc(100vh - 56px);">
+                <ul class="nav flex-column" id="sidebarTabs">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-tab="orders">
+                            <i class="bi bi-receipt"></i> 订单管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="review">
+                            <i class="bi bi-check-circle"></i> 房源审核
+                            <span class="badge bg-danger ms-1" id="pendingBadge">0</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="landlord">
+                            <i class="bi bi-person-badge"></i> 房东资质审核
+                            <span class="badge bg-danger ms-1" id="auditBadge">0</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="houses">
+                            <i class="bi bi-building"></i> 房源管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="users">
+                            <i class="bi bi-people"></i> 用户管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="comments">
+                            <i class="bi bi-chat-dots"></i> 评论管理
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="col-md-10 p-4" id="mainContent">
+                <!-- 订单管理 -->
+                <div id="tab-orders"></div>
+                <!-- 房东资质审核 -->
+                <div id="tab-landlord" style="display:none;"></div>
+                <!-- 房源审核 -->
+                <div id="tab-review" style="display:none;"></div>
+                <!-- 房源管理 -->
+                <div id="tab-houses" style="display:none;"></div>
+                <!-- 用户管理 -->
+                <div id="tab-users" style="display:none;"></div>
+                <!-- 评论管理 -->
+                <div id="tab-comments" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+    <!-- 用户新增/编辑模态框 -->
+    <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userModalTitle">新增用户</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="userError" class="alert alert-danger d-none"></div>
+                    <input type="hidden" id="userId">
+                    <div class="mb-3">
+                        <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="userUsername" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码 <span class="text-danger" id="pwdRequired">*</span></label>
+                        <input type="password" class="form-control" id="userPassword" placeholder="新增必填，编辑留空则不修改">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">昵称</label>
+                        <input type="text" class="form-control" id="userNickname">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">角色 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="userRole">
+                            <option value="TENANT">房客</option>
+                            <option value="LANDLORD">房东</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">手机号</label>
+                        <input type="text" class="form-control" id="userPhone" maxlength="11" placeholder="11位手机号">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">邮箱</label>
+                        <input type="email" class="form-control" id="userEmail">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUser()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+        const statusMap = {PENDING:'待审核',ONLINE:'已上架',OFFLINE:'已下架'};
+        const orderStatusMap = {UNPAID:'待支付',PAID:'已支付',CHECKED_IN:'已入住',COMPLETED:'已完成',CANCELLED:'已取消'};
+        const typeMap = {WHOLE:'整套',PRIVATE:'独立房间',SHARED:'合住房间'};
+        const auditStatusMap = {PENDING:'待审核',APPROVED:'已通过',REJECTED:'已驳回'};
+
+        let currentTab = 'orders';
+
+        // 初始化
+        fetch('/api/user/current').then(r => r.json()).then(res => {
+            if (res.code !== 200 || !res.data) {
+                location.href = '/login';
+                return;
+            }
+            const user = res.data;
+            if (user.role !== 'ADMIN') {
+                alert('无权访问管理后台');
+                location.href = '/';
+                return;
+            }
+            document.getElementById('navRight').innerHTML = `
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-light" href="#" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i> ${user.nickname} (管理员)
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="/">返回首页</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+                    </ul>
+                </li>`;
+            loadTab('orders');
+        });
+
+        // 侧边栏切换
+        document.getElementById('sidebarTabs').addEventListener('click', e => {
+            e.preventDefault();
+            const link = e.target.closest('a[data-tab]');
+            if (!link) return;
+            const tab = link.dataset.tab;
+            loadTab(tab);
+        });
+
+        function loadTab(tab) {
+            currentTab = tab;
+            // 更新侧边栏激活
+            document.querySelectorAll('#sidebarTabs .nav-link').forEach(a => a.classList.remove('active'));
+            document.querySelector(`#sidebarTabs a[data-tab="${tab}"]`).classList.add('active');
+            // 隐藏所有面板
+            document.querySelectorAll('#mainContent > div').forEach(d => d.style.display = 'none');
+            const panel = document.getElementById('tab-' + tab);
+            panel.style.display = 'block';
+            panel.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">加载中...</p></div>';
+
+            if (tab === 'landlord') loadLandlords();
+            else if (tab === 'review') loadReview();
+            else if (tab === 'houses') loadHouses();
+            else if (tab === 'users') loadUsers();
+            else if (tab === 'orders') loadOrders();
+            else if (tab === 'comments') loadComments();
+        }
+
+        // ============ 房东资质审核 ============
+        let landlordPage = 1, landlordStatus = 'PENDING';
+        function loadLandlords(page, status) {
+            if (page !== undefined) landlordPage = page;
+            if (status !== undefined) landlordStatus = status;
+            let url = `/admin/api/audits?pageNum=${landlordPage}&pageSize=10`;
+            if (landlordStatus) url += '&status=' + landlordStatus;
+            fetch(url).then(r => r.json()).then(res => {
+                if (res.code !== 200) { showError('tab-landlord', '加载失败'); return; }
+                const data = res.data;
+                document.getElementById('auditBadge').textContent = landlordStatus === 'PENDING' ? (data.total || 0) : document.getElementById('auditBadge').textContent;
+                let html = `<h4 class="mb-3"><i class="bi bi-person-badge"></i> 房东资质审核</h4>`;
+                html += `<div class="mb-3 btn-group btn-group-sm">
+                    <button class="btn ${landlordStatus==='PENDING'?'btn-primary':'btn-outline-primary'}" onclick="loadLandlords(1,'PENDING')">待审核</button>
+                    <button class="btn ${landlordStatus==='APPROVED'?'btn-primary':'btn-outline-primary'}" onclick="loadLandlords(1,'APPROVED')">已通过</button>
+                    <button class="btn ${landlordStatus==='REJECTED'?'btn-primary':'btn-outline-primary'}" onclick="loadLandlords(1,'REJECTED')">已驳回</button>
+                    <button class="btn ${landlordStatus===''?'btn-primary':'btn-outline-primary'}" onclick="loadLandlords(1,'')">全部</button>
+                </div>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无记录</div>';
+                } else {
+                    html += renderPagination(data, 'loadLandlords');
+                    data.rows.forEach(r => {
+                        const a = r.audit;
+                        const imgs = a.houseImages ? a.houseImages.split(',') : [];
+                        const statusClass = a.status === 'APPROVED' ? 'success' : a.status === 'REJECTED' ? 'danger' : 'warning';
+                        html += `<div class="card mb-3 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">${a.realName || '-'}
+                                            <span class="badge bg-${statusClass} ms-1">${auditStatusMap[a.status] || a.status}</span>
+                                        </h6>
+                                        <div class="text-muted small">账号：${r.username}（${r.nickname || '-'}） · 提交时间：${a.createTime ? a.createTime.substring(0,16) : ''}</div>
+                                    </div>
+                                    ${a.status === 'PENDING' ? `<div class="text-nowrap">
+                                        <button class="btn btn-success btn-sm" onclick="approveAudit(${a.id})"><i class="bi bi-check-lg"></i> 通过</button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="rejectAudit(${a.id})"><i class="bi bi-x-lg"></i> 驳回</button>
+                                    </div>` : ''}
+                                </div>
+                                <hr class="my-2">
+                                <div class="row small">
+                                    <div class="col-md-4">身份证号：${a.idCard || '-'}</div>
+                                    <div class="col-md-4">联系电话：${a.phone || '-'}</div>
+                                    <div class="col-md-4">联系地址：${a.address || '-'}</div>
+                                </div>
+                                <div class="mt-3">
+                                    <div class="small fw-bold mb-1">房产证 / 资质证明</div>
+                                    ${a.certImage ? `<a href="${a.certImage}" target="_blank"><img src="${a.certImage}" class="img-thumbnail" style="max-height:160px"></a>` : '<span class="text-muted small">未上传</span>'}
+                                </div>
+                                <div class="mt-2">
+                                    <div class="small fw-bold mb-1">房屋图片（${imgs.length}）</div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        ${imgs.length ? imgs.map(u => `<a href="${u}" target="_blank"><img src="${u}" class="img-thumbnail" style="width:100px;height:80px;object-fit:cover"></a>`).join('') : '<span class="text-muted small">未上传</span>'}
+                                    </div>
+                                </div>
+                                ${a.remark ? `<div class="alert alert-warning mt-2 mb-0 py-1 small">审核意见：${a.remark}</div>` : ''}
+                            </div>
+                        </div>`;
+                    });
+                    html += renderPagination(data, 'loadLandlords');
+                }
+                document.getElementById('tab-landlord').innerHTML = html;
+            });
+        }
+
+        function approveAudit(id) {
+            if (!confirm('确认该房东资质审核通过？')) return;
+            fetch(`/admin/api/audit/${id}/approve`, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadLandlords(); }
+                else alert(res.msg);
+            });
+        }
+
+        function rejectAudit(id) {
+            const remark = prompt('请输入驳回原因（可留空）：');
+            if (remark === null) return;
+            fetch(`/admin/api/audit/${id}/reject?remark=` + encodeURIComponent(remark), {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadLandlords(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 房源审核 ============
+        let reviewPage = 1;
+        function loadReview(page) {
+            if (page) reviewPage = page;
+            fetch(`/admin/api/houses/pending?pageNum=${reviewPage}&pageSize=10`).then(r => r.json()).then(res => {
+                if (res.code !== 200) { showError('tab-review', '加载失败'); return; }
+                const data = res.data;
+                document.getElementById('pendingBadge').textContent = data.total || 0;
+                let html = `<h4 class="mb-3"><i class="bi bi-check-circle"></i> 房源审核 <span class="badge bg-danger">${data.total}</span></h4>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无待审核房源</div>';
+                } else {
+                    html += renderPagination(data, 'loadReview');
+                    html += '<div class="table-responsive"><table class="table table-hover align-middle">';
+                    html += '<thead class="table-light"><tr><th>ID</th><th>封面</th><th>房源名称</th><th>城市</th><th>房型</th><th>价格</th><th>房东</th><th>提交时间</th><th>操作</th></tr></thead><tbody>';
+                    data.rows.forEach(r => {
+                        const h = r.house;
+                        html += `<tr>
+                            <td>${h.id}</td>
+                            <td><img src="${h.coverImage || 'https://picsum.photos/60/40'}" width="60" height="40" style="object-fit:cover;border-radius:4px"></td>
+                            <td><strong>${h.name}</strong></td>
+                            <td>${h.city}</td>
+                            <td>${typeMap[h.houseType] || h.houseType}</td>
+                            <td class="text-danger fw-bold">&yen;${h.price}</td>
+                            <td>${r.landlordName}</td>
+                            <td><small>${h.createTime}</small></td>
+                            <td>
+                                <button class="btn btn-success btn-sm" onclick="approve(${h.id})"><i class="bi bi-check-lg"></i> 通过</button>
+                                <button class="btn btn-outline-danger btn-sm" onclick="reject(${h.id})"><i class="bi bi-x-lg"></i> 驳回</button>
+                            </td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    html += renderPagination(data, 'loadReview');
+                }
+                document.getElementById('tab-review').innerHTML = html;
+            });
+        }
+
+        function approve(id) {
+            if (!confirm('确认审核通过该房源？')) return;
+            fetch(`/admin/api/house/${id}/approve`, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadReview(); loadDashboard(); }
+                else alert(res.msg);
+            });
+        }
+
+        function reject(id) {
+            if (!confirm('确认驳回该房源？')) return;
+            fetch(`/admin/api/house/${id}/reject`, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadReview(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 房源管理 ============
+        let housesPage = 1, housesStatus = '';
+        function loadHouses(page, status) {
+            if (page !== undefined) housesPage = page;
+            if (status !== undefined) housesStatus = status;
+            let url = `/admin/api/houses?pageNum=${housesPage}&pageSize=10`;
+            if (housesStatus) url += '&status=' + housesStatus;
+            fetch(url).then(r => r.json()).then(res => {
+                if (res.code !== 200) { showError('tab-houses', '加载失败'); return; }
+                const data = res.data;
+                let html = `<h4 class="mb-3"><i class="bi bi-building"></i> 房源管理</h4>`;
+                html += `<div class="mb-3 btn-group btn-group-sm">
+                    <button class="btn ${housesStatus===''?'btn-primary':'btn-outline-primary'}" onclick="loadHouses(1,'')">全部</button>
+                    <button class="btn ${housesStatus==='ONLINE'?'btn-primary':'btn-outline-primary'}" onclick="loadHouses(1,'ONLINE')">已上架</button>
+                    <button class="btn ${housesStatus==='PENDING'?'btn-primary':'btn-outline-primary'}" onclick="loadHouses(1,'PENDING')">待审核</button>
+                    <button class="btn ${housesStatus==='OFFLINE'?'btn-primary':'btn-outline-primary'}" onclick="loadHouses(1,'OFFLINE')">已下架</button>
+                </div>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无房源</div>';
+                } else {
+                    html += renderPagination(data, 'loadHouses');
+                    html += '<div class="table-responsive"><table class="table table-hover align-middle">';
+                    html += '<thead class="table-light"><tr><th>ID</th><th>名称</th><th>城市</th><th>状态</th><th>价格</th><th>房东</th><th>评分</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+                    data.rows.forEach(r => {
+                        const h = r.house;
+                        const statusClass = h.status === 'ONLINE' ? 'success' : h.status === 'PENDING' ? 'warning' : 'secondary';
+                        html += `<tr>
+                            <td>${h.id}</td>
+                            <td><strong>${h.name}</strong></td>
+                            <td>${h.city}</td>
+                            <td><span class="badge bg-${statusClass}">${statusMap[h.status] || h.status}</span></td>
+                            <td>&yen;${h.price}</td>
+                            <td>${r.landlordName}</td>
+                            <td>${h.rating || '-'}</td>
+                            <td><small>${h.createTime ? h.createTime.substring(0,10) : ''}</small></td>
+                            <td>${h.status === 'ONLINE' ? `<button class="btn btn-outline-secondary btn-sm" onclick="offlineHouse(${h.id})">下架</button>` : ''}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    html += renderPagination(data, 'loadHouses');
+                }
+                document.getElementById('tab-houses').innerHTML = html;
+            });
+        }
+
+        function offlineHouse(id) {
+            if (!confirm('确认下架该房源？')) return;
+            fetch(`/admin/api/house/${id}/offline`, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadHouses(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 用户管理 ============
+        let usersPage = 1;
+        function loadUsers(page) {
+            if (page) usersPage = page;
+            fetch(`/admin/api/users?pageNum=${usersPage}&pageSize=10`).then(r => r.json()).then(res => {
+                if (res.code !== 200) { showError('tab-users', '加载失败'); return; }
+                const data = res.data;
+                let html = `<h4 class="mb-3"><i class="bi bi-people"></i> 用户管理
+                    <button class="btn btn-primary btn-sm ms-2" onclick="openUserModal()"><i class="bi bi-plus-lg"></i> 新增用户</button>
+                    </h4>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无用户</div>';
+                } else {
+                    html += renderPagination(data, 'loadUsers');
+                    html += '<div class="table-responsive"><table class="table table-hover align-middle">';
+                    html += '<thead class="table-light"><tr><th>ID</th><th>用户名</th><th>昵称</th><th>角色</th><th>手机号</th><th>邮箱</th><th>注册时间</th><th>操作</th></tr></thead><tbody>';
+                    data.rows.forEach(u => {
+                        html += `<tr>
+                            <td>${u.id}</td>
+                            <td><strong>${u.username}</strong></td>
+                            <td>${u.nickname || '-'}</td>
+                            <td><span class="badge bg-${u.role==='ADMIN'?'dark':u.role==='LANDLORD'?'primary':'info'}">${roleMap[u.role] || u.role}</span></td>
+                            <td>${u.phone || '-'}</td>
+                            <td>${u.email || '-'}</td>
+                            <td><small>${u.createTime ? u.createTime.substring(0,10) : ''}</small></td>
+                            <td>
+                                ${u.role !== 'ADMIN' ? `<button class="btn btn-outline-primary btn-sm me-1" onclick="editUser(${u.id}, '${u.username}', '${u.nickname || ''}', '${u.role}', '${u.phone || ''}', '${u.email || ''}')" title="编辑"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-outline-danger btn-sm" onclick="deleteUser(${u.id})" title="删除"><i class="bi bi-trash"></i></button>` : '<span class="text-muted">-</span>'}
+                            </td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    html += renderPagination(data, 'loadUsers');
+                }
+                document.getElementById('tab-users').innerHTML = html;
+            });
+        }
+
+        function openUserModal(user) {
+            const isEdit = !!user;
+            document.getElementById('userModalTitle').textContent = isEdit ? '编辑用户' : '新增用户';
+            document.getElementById('userId').value = user ? user.id : '';
+            document.getElementById('userUsername').value = user ? user.username : '';
+            document.getElementById('userUsername').disabled = isEdit;
+            document.getElementById('userPassword').value = '';
+            document.getElementById('userPassword').required = !isEdit;
+            document.getElementById('userNickname').value = user ? user.nickname : '';
+            document.getElementById('userRole').value = user ? user.role : 'TENANT';
+            document.getElementById('userPhone').value = user ? user.phone : '';
+            document.getElementById('userEmail').value = user ? user.email : '';
+            document.getElementById('userError').classList.add('d-none');
+            new bootstrap.Modal(document.getElementById('userModal')).show();
+        }
+
+        function editUser(id, username, nickname, role, phone, email) {
+            openUserModal({id, username, nickname, role, phone, email});
+        }
+
+        function saveUser() {
+            const id = document.getElementById('userId').value;
+            const data = {
+                username: document.getElementById('userUsername').value.trim(),
+                password: document.getElementById('userPassword').value,
+                nickname: document.getElementById('userNickname').value.trim(),
+                role: document.getElementById('userRole').value,
+                phone: document.getElementById('userPhone').value.trim(),
+                email: document.getElementById('userEmail').value.trim()
+            };
+            if (!data.username) { showUserError('用户名不能为空'); return; }
+            if (!id && !data.password) { showUserError('密码不能为空'); return; }
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `/admin/api/user/${id}` : '/admin/api/user';
+            fetch(url, {
+                method: method,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+                    loadUsers();
+                } else {
+                    showUserError(res.msg);
+                }
+            }).catch(err => {
+                console.error('保存用户失败:', err);
+                showUserError('保存失败，请重试');
+            });
+        }
+
+        function showUserError(msg) {
+            const el = document.getElementById('userError');
+            el.textContent = msg;
+            el.classList.remove('d-none');
+        }
+
+        function deleteUser(id) {
+            if (!confirm('确认删除该用户？相关数据将不可恢复。')) return;
+            fetch(`/admin/api/user/${id}`, {method: 'DELETE'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadUsers(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 订单管理 ============
+        let ordersPage = 1, ordersStatus = '';
+        function loadOrders(page, status) {
+            if (page !== undefined) ordersPage = page;
+            if (status !== undefined) ordersStatus = status;
+            let url = `/admin/api/orders?pageNum=${ordersPage}&pageSize=10`;
+            if (ordersStatus) url += '&status=' + ordersStatus;
+            fetch(url).then(r => r.json()).then(res => {
+                if (res.code === 401) { location.href = '/login'; return; }
+                if (res.code !== 200) { showError('tab-orders', res.msg || '加载失败'); return; }
+                const data = res.data;
+                let html = `<h4 class="mb-3"><i class="bi bi-receipt"></i> 订单管理</h4>`;
+                html += `<div class="mb-3 btn-group btn-group-sm">
+                    <button class="btn ${ordersStatus===''?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'')">全部</button>
+                    <button class="btn ${ordersStatus==='UNPAID'?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'UNPAID')">待支付</button>
+                    <button class="btn ${ordersStatus==='PAID'?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'PAID')">已支付</button>
+                    <button class="btn ${ordersStatus==='CHECKED_IN'?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'CHECKED_IN')">已入住</button>
+                    <button class="btn ${ordersStatus==='COMPLETED'?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'COMPLETED')">已完成</button>
+                    <button class="btn ${ordersStatus==='CANCELLED'?'btn-primary':'btn-outline-primary'}" onclick="loadOrders(1,'CANCELLED')">已取消</button>
+                </div>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无订单</div>';
+                } else {
+                    html += renderPagination(data, 'loadOrders');
+                    html += '<div class="table-responsive"><table class="table table-hover align-middle">';
+                    html += '<thead class="table-light"><tr><th>订单编号</th><th>房源</th><th>房客</th><th>入住日期</th><th>天数</th><th>金额</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+                    data.rows.forEach(r => {
+                        const o = r.order;
+                        const sClass = o.status === 'COMPLETED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : o.status === 'PAID' ? 'primary' : o.status === 'CHECKED_IN' ? 'info' : 'warning';
+                        html += `<tr>
+                            <td><small title="${o.orderNo}">${(o.orderNo || '').substring(0,12)}...</small></td>
+                            <td>${r.houseName}</td>
+                            <td>${r.tenantName}</td>
+                            <td>${o.checkInDate} ~ ${o.checkOutDate}</td>
+                            <td>${o.nights}晚</td>
+                            <td class="text-danger fw-bold">&yen;${o.totalPrice}</td>
+                            <td><span class="badge bg-${sClass}">${orderStatusMap[o.status] || o.status}</span></td>
+                            <td><small>${o.createTime ? o.createTime.substring(0,16) : ''}</small></td>
+                            <td><button class="btn btn-outline-danger btn-sm" onclick="delOrder(${o.id})" title="删除订单"><i class="bi bi-trash"></i></button></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    html += renderPagination(data, 'loadOrders');
+                }
+                document.getElementById('tab-orders').innerHTML = html;
+            }).catch(err => {
+                console.error('加载订单失败:', err);
+                showError('tab-orders', '加载失败，请刷新重试');
+            });
+        }
+
+        function delOrder(id) {
+            if (!confirm('确认删除该订单？删除后可在数据库中恢复。')) return;
+            fetch(`/admin/api/order/${id}`, {method:'DELETE'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadOrders(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 评论管理 ============
+        let commentsPage = 1;
+        function loadComments(page) {
+            if (page) commentsPage = page;
+            fetch(`/admin/api/comments?pageNum=${commentsPage}&pageSize=10`).then(r => r.json()).then(res => {
+                if (res.code !== 200) { showError('tab-comments', '加载失败'); return; }
+                const data = res.data;
+                let html = `<h4 class="mb-3"><i class="bi bi-chat-dots"></i> 评论管理</h4>`;
+                if (!data.rows || data.rows.length === 0) {
+                    html += '<div class="alert alert-info">暂无评论</div>';
+                } else {
+                    html += renderPagination(data, 'loadComments');
+                    html += '<div class="table-responsive"><table class="table table-hover align-middle">';
+                    html += '<thead class="table-light"><tr><th>ID</th><th>房源</th><th>用户</th><th>评分</th><th>内容</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+                    data.rows.forEach(r => {
+                        const c = r.comment;
+                        html += `<tr>
+                            <td>${c.id}</td>
+                            <td>${r.houseName}</td>
+                            <td>${r.userName}</td>
+                            <td>${'★'.repeat(c.rating)}${'☆'.repeat(5-c.rating)}</td>
+                            <td style="max-width:300px"><small>${c.content || ''}</small></td>
+                            <td><small>${c.createTime ? c.createTime.substring(0,16) : ''}</small></td>
+                            <td><button class="btn btn-outline-danger btn-sm" onclick="delComment(${c.id})"><i class="bi bi-trash"></i></button></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    html += renderPagination(data, 'loadComments');
+                }
+                document.getElementById('tab-comments').innerHTML = html;
+            });
+        }
+
+        function delComment(id) {
+            if (!confirm('确认删除该评论？')) return;
+            fetch(`/admin/api/comment/${id}`, {method:'DELETE'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadComments(); }
+                else alert(res.msg);
+            });
+        }
+
+        // ============ 工具函数 ============
+        function renderPagination(data, fnName) {
+            if (data.total <= data.pageSize) return '';
+            const totalPages = Math.ceil(data.total / data.pageSize);
+            let html = '<nav><ul class="pagination pagination-sm">';
+            html += `<li class="page-item ${data.pageNum <= 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="${fnName}(${data.pageNum - 1})">&laquo;</a></li>`;
+            for (let i = 1; i <= totalPages && i <= 10; i++) {
+                html += `<li class="page-item ${i === data.pageNum ? 'active' : ''}"><a class="page-link" href="#" onclick="${fnName}(${i})">${i}</a></li>`;
+            }
+            html += `<li class="page-item ${data.pageNum >= totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="${fnName}(${data.pageNum + 1})">&raquo;</a></li>`;
+            html += '</ul></nav>';
+            return html;
+        }
+
+        // 仪表盘：更新待审核数量徽标
+        function loadDashboard() {
+            fetch('/admin/api/dashboard').then(r => r.json()).then(res => {
+                if (res.code !== 200) return;
+                const d = res.data;
+                const badge = document.getElementById('auditBadge');
+                if (badge) badge.textContent = d.pendingAuditCount || 0;
+            });
+        }
+
+        function showError(tabId, msg) {
+            document.getElementById(tabId).innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.href = '/login');
+        }
+    </script>
+</body>
+</html>

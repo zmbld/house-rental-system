@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-house-heart"></i> 民宿预订平台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/house/list">房源列表</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/order/list">我的订单</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight">
+                    <li class="nav-item"><a class="nav-link" href="/login">登录</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">注册</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-4">
+        <h3 class="fw-bold mb-4"><i class="bi bi-receipt"></i> 我的订单</h3>
+
+        <div class="row" id="orderList">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">加载中...</p>
+            </div>
+        </div>
+
+        <nav id="pagination" class="mt-4"></nav>
+    </div>
+
+    <!-- 评价弹窗 -->
+    <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">评价本次入住</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="cOrderId">
+                    <p class="text-muted small" id="cOrderNo"></p>
+                    <div class="mb-3">
+                        <label class="form-label">评分</label>
+                        <select id="cRating" class="form-select">
+                            <option value="5">★★★★★ 非常满意</option>
+                            <option value="4">★★★★ 满意</option>
+                            <option value="3">★★★ 一般</option>
+                            <option value="2">★★ 不满意</option>
+                            <option value="1">★ 很差</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">评价内容（5-500字）</label>
+                        <textarea id="cContent" class="form-control" rows="4" maxlength="500" placeholder="说说你的入住体验吧～"></textarea>
+                    </div>
+                    <div id="cErr" class="text-danger small" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="submitComment()">提交评价</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+
+    </footer>
+
+    <script>
+        let currentPage = 1;
+
+        initNav();
+        loadOrders(1);
+
+        function loadOrders(pageNum) {
+            currentPage = pageNum;
+            const container = document.getElementById('orderList');
+            fetch(`/api/order/list?pageNum=${pageNum}&pageSize=10`).then(r => {
+                // 未登录或会话已失效时后端可能重定向到登录页
+                if (r.redirected || r.url.indexOf('/login') !== -1) {
+                    location.href = '/login';
+                    return null;
+                }
+                return r.json();
+            }).then(res => {
+                if (!res) return;
+                if (res.code === 401) {
+                    location.href = '/login';
+                    return;
+                }
+                if (res.code !== 200) {
+                    container.innerHTML = `<div class="col-12 text-center text-danger py-5"><i class="bi bi-exclamation-circle display-3"></i><p>${res.msg || '订单加载失败'}</p></div>`;
+                    document.getElementById('pagination').innerHTML = '';
+                    return;
+                }
+                if (!res.data.rows.length) {
+                    container.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox display-3"></i><p>暂无订单</p><a href="/house/list" class="btn btn-primary">去看看房源</a></div>';
+                    document.getElementById('pagination').innerHTML = '';
+                    return;
+                }
+                const statusMap = {
+                    UNPAID: {text:'待支付', cls:'warning'},
+                    PAID: {text:'已支付', cls:'info'},
+                    CHECKED_IN: {text:'已入住', cls:'primary'},
+                    COMPLETED: {text:'已完成', cls:'success'},
+                    CANCELLED: {text:'已取消', cls:'secondary'}
+                };
+                container.innerHTML = res.data.rows.map(row => {
+                    const order = row.order;
+                    const house = row.house || {};
+                    const s = statusMap[order.status] || {text:order.status, cls:'dark'};
+                    const canPay = row.canPay === true;
+                    const canCancel = row.canCancel === true;
+                    const terminal = row.terminal === true;
+                    const houseStatus = row.houseStatus;
+                    const houseOffline = houseStatus && houseStatus !== 'ONLINE';
+
+                    // 按后端返回的可操作标记渲染按钮，避免点击无效操作
+                    let actions = '';
+                    const canCheckIn = row.canCheckIn === true;
+                    const canComplete = row.canComplete === true;
+                    if (canCheckIn) {
+                        actions += `<button class="btn btn-primary btn-sm me-1" onclick="checkInOrder(${order.id})">办理入住</button>`;
+                    }
+                    if (canComplete) {
+                        actions += `<button class="btn btn-success btn-sm me-1" onclick="completeOrder(${order.id})">确认完成</button>`;
+                    }
+                    if (row.canComment === true) {
+                        actions += `<button class="btn btn-warning btn-sm me-1" onclick="openComment(${order.id}, '${order.orderNo}')">我要评价</button>`;
+                    }
+                    if (terminal && !canComplete) {
+                        // 终态订单（已完成/已取消）不显示其他操作按钮
+                        actions += '<span class="text-muted small">订单已完结</span>';
+                    } else if (!terminal) {
+                        if (canPay) {
+                            actions += `<button class="btn btn-success btn-sm me-1" onclick="payOrder(${order.id})">去支付</button>`;
+                        } else if (order.status === 'UNPAID' && houseOffline) {
+                            // 待支付但房源已下架，按钮禁用并提示
+                            actions += `<button class="btn btn-secondary btn-sm me-1" disabled title="房源已下架">无法支付</button>`;
+                        }
+                        if (canCancel) {
+                            actions += `<button class="btn btn-outline-danger btn-sm" onclick="cancelOrder(${order.id})">取消订单</button>`;
+                        }
+                        if (!canPay && !canCancel && actions === '') {
+                            // 房客视角：已支付且无法取消，等待房东办理入住
+                            // （房东视角 actions 中已有「办理入住」按钮，此处不能覆盖）
+                            actions = '<span class="text-muted small">已支付，等待房东办理入住</span>';
+                        }
+                    }
+                    // 房源下架提示
+                    const offlineTag = houseOffline
+                        ? '<span class="badge bg-secondary ms-2">房源已下架</span>'
+                        : '';
+                    return `
+                    <div class="col-12 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <span class="badge bg-${s.cls} me-2">${s.text}</span>
+                                            <small class="text-muted">订单号: ${order.orderNo}</small>
+                                            ${offlineTag}
+                                        </div>
+                                        <h5 class="mb-1">${house.name || '房源信息'}</h5>
+                                        <p class="mb-1 text-muted small">
+                                            入住: ${order.checkInDate} ~ 退房: ${order.checkOutDate} · 共 ${order.nights} 晚
+                                        </p>
+                                        <p class="mb-0 small text-muted">
+                                            入住人: ${order.guestName || '-'} · 手机: ${order.guestPhone || '-'}
+                                        </p>
+                                    </div>
+                                    <div class="col-md-4 text-md-end mt-2 mt-md-0">
+                                        <p class="fw-bold fs-5 text-primary mb-2">&yen;${order.totalPrice}</p>
+                                        ${actions}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                // 分页
+                const totalPages = Math.ceil(res.data.total / res.data.pageSize);
+                if (totalPages > 1) {
+                    let html = '<ul class="pagination justify-content-center">';
+                    html += `<li class="page-item ${currentPage <= 1 ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="loadOrders(${currentPage - 1})">上一页</a></li>`;
+                    for (let i = 1; i <= totalPages; i++) {
+                        html += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="loadOrders(${i})">${i}</a></li>`;
+                    }
+                    html += `<li class="page-item ${currentPage >= totalPages ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="loadOrders(${currentPage + 1})">下一页</a></li>`;
+                    html += '</ul>';
+                    document.getElementById('pagination').innerHTML = html;
+                }
+            }).catch(err => {
+                console.error('加载订单失败:', err);
+                container.innerHTML = '<div class="col-12 text-center text-danger py-5"><i class="bi bi-exclamation-circle display-3"></i><p>加载订单失败，请刷新重试</p></div>';
+                document.getElementById('pagination').innerHTML = '';
+            });
+        }
+
+        function payOrder(id) {
+            fetch('/api/order/pay/' + id, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    alert('支付成功！（模拟支付）');
+                    loadOrders(currentPage);
+                } else {
+                    alert(res.msg);
+                }
+            });
+        }
+
+        function checkInOrder(id) {
+            if (!confirm('确认为该订单办理入住？')) return;
+            fetch('/api/order/check-in/' + id, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadOrders(currentPage); }
+                else alert(res.msg);
+            });
+        }
+
+        function completeOrder(id) {
+            if (!confirm('确认该订单退房完成？完成后房客可评价。')) return;
+            fetch('/api/order/complete/' + id, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) { alert(res.msg); loadOrders(currentPage); }
+                else alert(res.msg);
+            });
+        }
+
+        let commentModal = null;
+        function openComment(orderId, orderNo) {
+            document.getElementById('cOrderId').value = orderId;
+            document.getElementById('cOrderNo').textContent = '订单号：' + orderNo;
+            document.getElementById('cRating').value = '5';
+            document.getElementById('cContent').value = '';
+            document.getElementById('cErr').style.display = 'none';
+            if (!commentModal) commentModal = new bootstrap.Modal(document.getElementById('commentModal'));
+            commentModal.show();
+        }
+
+        function submitComment() {
+            const orderId = document.getElementById('cOrderId').value;
+            const rating = document.getElementById('cRating').value;
+            const content = document.getElementById('cContent').value.trim();
+            const err = document.getElementById('cErr');
+            err.style.display = 'none';
+            if (content.length < 5) { err.textContent = '评价内容至少 5 个字'; err.style.display = ''; return; }
+            if (content.length > 500) { err.textContent = '评价内容最多 500 个字'; err.style.display = ''; return; }
+            fetch('/api/comment/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({orderId: orderId, rating: Number(rating), content: content})
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    commentModal.hide();
+                    alert('评价成功，感谢你的反馈！');
+                    loadOrders(currentPage);
+                } else {
+                    err.textContent = res.msg;
+                    err.style.display = '';
+                }
+            });
+        }
+
+        function cancelOrder(id) {
+            if (!confirm('确定要取消该订单吗？（入住前3天可免费取消）')) return;
+            fetch('/api/order/cancel/' + id, {method:'POST'}).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    alert('订单已取消');
+                    loadOrders(currentPage);
+                } else {
+                    alert(res.msg);
+                }
+            });
+        }
+
+        function initNav() {
+            fetch('/api/user/current').then(r => r.json()).then(res => {
+                if (res.code === 200 && res.data) {
+                    const user = res.data;
+                    const navRight = document.getElementById('navRight');
+                    const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+                    let menuHtml = '<li class="nav-item dropdown">';
+                    menuHtml += '<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">';
+                    menuHtml += '<i class="bi bi-person-circle"></i> ' + user.nickname + ' (' + (roleMap[user.role] || user.role) + ')';
+                    menuHtml += '</a><ul class="dropdown-menu dropdown-menu-end">';
+                    if (user.role === 'ADMIN') {
+                        menuHtml += '<li><a class="dropdown-item" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>';
+                    }
+                    if (user.role === 'LANDLORD') {
+                        menuHtml += '<li><a class="dropdown-item" href="/house/publish">发布房源</a></li>';
+                    }
+                    menuHtml += '<li><hr class="dropdown-divider"></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>';
+                    menuHtml += '</ul></li>';
+                    navRight.innerHTML = menuHtml;
+                }
+            });
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.reload());
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-house-heart"></i> 民宿预订平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link active" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/house/list">房源列表</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight">
+                    <li class="nav-item"><a class="nav-link" href="/login">登录</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">注册</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 搜索横幅 -->
+    <section class="hero-section text-white text-center py-5">
+        <div class="container py-5">
+            <h1 class="display-4 fw-bold mb-3">发现独一无二的民宿</h1>
+            <p class="lead mb-4">预订旅行中的家，体验当地的温度</p>
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="input-group input-group-lg shadow">
+                        <input type="text" id="heroCity" class="form-control" placeholder="搜索城市...">
+                        <button class="btn btn-warning fw-bold px-4" onclick="goSearch()">
+                            <i class="bi bi-search"></i> 搜索
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 热门房源 -->
+    <div class="container my-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-bold"><i class="bi bi-fire text-danger"></i> 热门房源</h3>
+            <a href="/house/list" class="btn btn-outline-primary btn-sm">查看更多 <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="row" id="hotHouses">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+
+    </footer>
+
+    <script>
+        // 检查登录状态
+        fetch('/api/user/current').then(r => r.json()).then(res => {
+            if (res.code === 200 && res.data) {
+                const user = res.data;
+                const navRight = document.getElementById('navRight');
+                const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+                let menuHtml = '<li class="nav-item dropdown">';
+                menuHtml += '<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">';
+                menuHtml += '<i class="bi bi-person-circle"></i> ' + user.nickname + ' (' + (roleMap[user.role] || user.role) + ')';
+                menuHtml += '</a><ul class="dropdown-menu dropdown-menu-end">';
+                if (user.role === 'ADMIN') {
+                    menuHtml += '<li><a class="dropdown-item" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>';
+                }
+                if (user.role === 'LANDLORD') {
+                    menuHtml += '<li><a class="dropdown-item" href="/house/publish">发布房源</a></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="/house/calendar"><i class="bi bi-calendar-week"></i> 房态日历</a></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="/order/list">订单管理</a></li>';
+                }
+                if (user.role === 'TENANT') {
+                    menuHtml += '<li><a class="dropdown-item" href="/order/list">我的订单</a></li>';
+                }
+                menuHtml += '<li><hr class="dropdown-divider"></li>';
+                menuHtml += '<li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>';
+                menuHtml += '</ul></li>';
+                navRight.innerHTML = menuHtml;
+            }
+        });
+
+        // 加载热门房源
+        fetch('/api/house/list?pageNum=1&pageSize=6&sortBy=rating_desc').then(r => r.json()).then(res => {
+            const container = document.getElementById('hotHouses');
+            if (res.code !== 200 || !res.data || res.data.rows.length === 0) {
+                container.innerHTML = '<div class="col-12 text-center text-muted py-5">暂无房源</div>';
+                return;
+            }
+            container.innerHTML = res.data.rows.map(h => `
+                <div class="col-md-4 col-sm-6 mb-4">
+                    <div class="card house-card shadow-sm h-100" onclick="location.href='/house/detail/${h.id}'">
+                        <div class="position-relative">
+                            <img src="${h.coverImage || 'https://picsum.photos/400/300'}" class="card-img-top" alt="${h.name}" style="height:220px;object-fit:cover">
+                            <span class="badge bg-danger position-absolute top-0 end-0 m-2">${h.houseType === 'WHOLE' ? '整套' : h.houseType === 'PRIVATE' ? '独立房间' : '合住房间'}</span>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="card-title fw-bold">${h.name}</h5>
+                            <p class="card-text text-muted small"><i class="bi bi-geo-alt"></i> ${h.city} · ${h.address}</p>
+                            <p class="card-text small text-muted">最多${h.maxGuests}人 · ${h.area || 0}m²</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-primary fw-bold fs-5">&yen;${h.price}<small class="fs-sm text-muted">/晚</small></span>
+                                <span class="text-warning"><i class="bi bi-star-fill"></i> ${h.rating || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        });
+
+        function goSearch() {
+            const city = document.getElementById('heroCity').value.trim();
+            location.href = '/house/list' + (city ? '?city=' + encodeURIComponent(city) : '');
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.reload());
+        }
+    </script>
+</body>
+</html>

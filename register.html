@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body class="bg-light">
+    <div class="container">
+        <div class="row justify-content-center min-vh-100 align-items-center py-4">
+            <div class="col-md-8 col-lg-6">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <i class="bi bi-person-plus display-4 text-primary"></i>
+                            <h3 class="fw-bold mt-2">注册账号</h3>
+                            <p class="text-muted">请选择注册类型</p>
+                        </div>
+
+                        <!-- 注册类型选择 -->
+                        <div class="row g-2 mb-4">
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="role" id="roleTenant" value="TENANT" checked>
+                                <label class="btn btn-outline-primary w-100 py-3" for="roleTenant">
+                                    <i class="bi bi-person"></i>
+                                    <div class="fw-bold mt-1">注册房客</div>
+                                    <small>填完信息即可使用</small>
+                                </label>
+                            </div>
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="role" id="roleLandlord" value="LANDLORD">
+                                <label class="btn btn-outline-success w-100 py-3" for="roleLandlord">
+                                    <i class="bi bi-house-door"></i>
+                                    <div class="fw-bold mt-1">注册房东</div>
+                                    <small>需提交资质材料审核</small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="errorMsg" class="alert alert-danger d-none"></div>
+                        <div id="successMsg" class="alert alert-success d-none"></div>
+
+                        <form id="registerForm">
+                            <!-- 账号基本信息 -->
+                            <div class="mb-3">
+                                <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                                <input type="text" name="username" class="form-control" placeholder="请输入用户名" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">密码 <span class="text-danger">*</span></label>
+                                <input type="password" name="password" class="form-control" placeholder="请输入密码" required minlength="6">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">昵称</label>
+                                    <input type="text" name="nickname" class="form-control" placeholder="请输入昵称">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">手机号</label>
+                                    <input type="text" name="phone" class="form-control" placeholder="请输入11位手机号" maxlength="11" inputmode="numeric">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">邮箱</label>
+                                <input type="email" name="email" class="form-control" placeholder="请输入邮箱">
+                            </div>
+
+                            <!-- 房东资质材料（仅注册房东时显示） -->
+                            <div id="landlordFields" style="display:none;">
+                                <hr>
+                                <div class="alert alert-info py-2 small">
+                                    <i class="bi bi-info-circle"></i> 以下材料将提交管理员审核，审核通过后即可发布房源
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">真实姓名 <span class="text-danger">*</span></label>
+                                        <input type="text" name="realName" class="form-control" placeholder="请输入真实姓名">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">身份证号 <span class="text-danger">*</span></label>
+                                        <input type="text" name="idCard" class="form-control" placeholder="请输入18位身份证号" maxlength="18">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">联系地址</label>
+                                    <input type="text" name="address" class="form-control" placeholder="请输入联系地址">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">房产证 / 资质证明 <span class="text-danger">*</span></label>
+                                    <input type="file" id="certFile" class="form-control" accept="image/*">
+                                    <input type="hidden" id="certImage">
+                                    <div id="certPreview" class="mt-2"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">房屋图片（可多张）</label>
+                                    <input type="file" id="houseFiles" class="form-control" accept="image/*" multiple>
+                                    <div id="housePreview" class="mt-2 d-flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 btn-lg mb-2" id="submitBtn">注 册</button>
+                        </form>
+                        <p class="text-center text-muted">已有账号？<a href="/login">立即登录</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const roleTenant = document.getElementById('roleTenant');
+        const roleLandlord = document.getElementById('roleLandlord');
+        const landlordFields = document.getElementById('landlordFields');
+        const submitBtn = document.getElementById('submitBtn');
+
+        let houseImageUrls = [];
+
+        function currentRole() {
+            return roleLandlord.checked ? 'LANDLORD' : 'TENANT';
+        }
+
+        function toggleRole() {
+            const isLandlord = currentRole() === 'LANDLORD';
+            landlordFields.style.display = isLandlord ? 'block' : 'none';
+            submitBtn.textContent = isLandlord ? '提交注册，等待管理员审核' : '注 册';
+            landlordFields.querySelectorAll('input[name="realName"], input[name="idCard"]')
+                .forEach(el => el.required = isLandlord);
+        }
+        roleTenant.addEventListener('change', toggleRole);
+        roleLandlord.addEventListener('change', toggleRole);
+        toggleRole();
+
+        // 上传图片
+        function uploadFile(file, onSuccess) {
+            const fd = new FormData();
+            fd.append('file', file);
+            return fetch('/api/upload', {method: 'POST', body: fd})
+                .then(r => r.json())
+                .then(res => {
+                    if (res.code === 200) {
+                        onSuccess(res.data.url);
+                    } else {
+                        alert(res.msg || '上传失败');
+                    }
+                })
+                .catch(() => alert('上传失败，请重试'));
+        }
+
+        // 房产证
+        document.getElementById('certFile').addEventListener('change', function() {
+            if (!this.files || !this.files[0]) return;
+            const preview = document.getElementById('certPreview');
+            preview.innerHTML = '<span class="text-muted small">上传中...</span>';
+            uploadFile(this.files[0], url => {
+                document.getElementById('certImage').value = url;
+                preview.innerHTML = `<img src="${url}" class="img-thumbnail" style="max-height:150px">`;
+            });
+        });
+
+        // 房屋图片（多张）
+        document.getElementById('houseFiles').addEventListener('change', function() {
+            const files = Array.from(this.files || []);
+            const preview = document.getElementById('housePreview');
+            files.forEach(file => {
+                uploadFile(file, url => {
+                    houseImageUrls.push(url);
+                    const div = document.createElement('div');
+                    div.className = 'position-relative';
+                    div.dataset.url = url;
+                    div.innerHTML = `<img src="${url}" class="img-thumbnail" style="width:100px;height:80px;object-fit:cover">
+                        <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0" style="padding:0 6px;" onclick="removeHouseImage(this)">&times;</button>`;
+                    preview.appendChild(div);
+                });
+            });
+        });
+
+        function removeHouseImage(btn) {
+            const url = btn.parentElement.dataset.url;
+            houseImageUrls = houseImageUrls.filter(u => u !== url);
+            btn.parentElement.remove();
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.classList.remove('d-none');
+            document.getElementById('successMsg').classList.add('d-none');
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const role = currentRole();
+            const data = {
+                username: this.username.value.trim(),
+                password: this.password.value,
+                nickname: this.nickname.value.trim() || this.username.value.trim(),
+                phone: this.phone.value.trim(),
+                email: this.email.value.trim(),
+                role: role
+            };
+
+            if (data.phone && !/^1[3-9]\d{9}$/.test(data.phone)) {
+                showError('手机号格式不正确，应为11位数字（1开头）');
+                return;
+            }
+
+            if (role === 'LANDLORD') {
+                data.realName = this.realName.value.trim();
+                data.idCard = this.idCard.value.trim();
+                data.address = this.address.value.trim();
+                data.certImage = document.getElementById('certImage').value;
+                data.houseImages = houseImageUrls;
+                if (!data.realName) { showError('请填写真实姓名'); return; }
+                if (!/^\d{17}[\dXx]$/.test(data.idCard)) { showError('身份证号格式不正确，应为18位（最后一位可为X）'); return; }
+                if (!data.certImage) { showError('请上传房产证等资质证明图片'); return; }
+            }
+
+            fetch('/api/user/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    document.getElementById('successMsg').textContent = res.msg + '，正在跳转...';
+                    document.getElementById('successMsg').classList.remove('d-none');
+                    document.getElementById('errorMsg').classList.add('d-none');
+                    setTimeout(() => location.href = '/login', 2000);
+                } else {
+                    showError(res.msg);
+                }
+            }).catch(() => showError('注册失败，请重试'));
+        });
+    </script>
+</body>
+</html>

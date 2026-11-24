@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-house-heart"></i> 民宿预订平台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/house/list">房源列表</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight">
+                    <li class="nav-item"><a class="nav-link" href="/login">登录</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">注册</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-4">
+        <!-- 筛选面板 -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small">城市</label>
+                        <input type="text" id="filterCity" class="form-control" placeholder="搜索城市">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">最低价</label>
+                        <input type="number" id="filterMinPrice" class="form-control" placeholder="￥">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">最高价</label>
+                        <input type="number" id="filterMaxPrice" class="form-control" placeholder="￥">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">入住人数</label>
+                        <input type="number" id="filterGuests" class="form-control" placeholder="最少人数" min="1">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">房型</label>
+                        <select id="filterType" class="form-select">
+                            <option value="">不限</option>
+                            <option value="WHOLE">整套</option>
+                            <option value="PRIVATE">独立房间</option>
+                            <option value="SHARED">合住房间</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">排序</label>
+                        <select id="filterSort" class="form-select">
+                            <option value="rating_desc">评分最高</option>
+                            <option value="price_asc">价格从低到高</option>
+                            <option value="price_desc">价格从高到低</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3 text-end">
+                    <button class="btn btn-primary" onclick="searchHouses()">
+                        <i class="bi bi-search"></i> 筛选
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="resetFilter()">重置</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 房源列表 -->
+        <div class="row" id="houseList">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">正在加载房源...</p>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <nav id="pagination" class="mt-4"></nav>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+
+    </footer>
+
+    <script>
+        let currentPage = 1;
+        const pageSize = 12;
+
+        // 从URL读取参数
+        const urlParams = new URLSearchParams(location.search);
+        if (urlParams.get('city')) document.getElementById('filterCity').value = urlParams.get('city');
+
+        initNav();
+        searchHouses();
+
+        function searchHouses(page) {
+            if (page) currentPage = page;
+            const params = new URLSearchParams();
+            params.set('pageNum', currentPage);
+            params.set('pageSize', pageSize);
+
+            const city = document.getElementById('filterCity').value.trim();
+            const minPrice = document.getElementById('filterMinPrice').value;
+            const maxPrice = document.getElementById('filterMaxPrice').value;
+            const guests = document.getElementById('filterGuests').value;
+            const houseType = document.getElementById('filterType').value;
+            const sortBy = document.getElementById('filterSort').value;
+
+            if (city) params.set('city', city);
+            if (minPrice) params.set('minPrice', minPrice);
+            if (maxPrice) params.set('maxPrice', maxPrice);
+            if (guests) params.set('maxGuests', guests);
+            if (houseType) params.set('houseType', houseType);
+            if (sortBy) params.set('sortBy', sortBy);
+
+            fetch('/api/house/list?' + params.toString()).then(r => r.json()).then(res => {
+                if (res.code !== 200) return;
+                const container = document.getElementById('houseList');
+                if (!res.data.rows.length) {
+                    container.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox display-3"></i><p class="mt-3">暂无符合条件的房源</p></div>';
+                    document.getElementById('pagination').innerHTML = '';
+                    return;
+                }
+                container.innerHTML = res.data.rows.map(h => `
+                    <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
+                        <div class="card house-card shadow-sm h-100" onclick="location.href='/house/detail/${h.id}'">
+                            <div class="position-relative">
+                                <img src="${h.coverImage || 'https://picsum.photos/400/300'}" class="card-img-top" alt="${h.name}" style="height:200px;object-fit:cover">
+                                <span class="badge bg-info position-absolute top-0 end-0 m-2">${h.houseType === 'WHOLE' ? '整套' : h.houseType === 'PRIVATE' ? '独立房间' : '合住'}</span>
+                            </div>
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <h6 class="card-title fw-bold mb-0 text-truncate" title="${h.name}">${h.name}</h6>
+                                </div>
+                                <p class="card-text text-muted small mb-2"><i class="bi bi-geo-alt"></i> ${h.city}</p>
+                                <div class="mt-auto">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-primary fw-bold fs-5">&yen;${h.price}<small class="text-muted fs-sm">/晚</small></span>
+                                        <span class="text-warning small"><i class="bi bi-star-fill"></i> ${h.rating || '新上'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+                // 分页
+                renderPagination(res.data.total, res.data.pageNum, res.data.pageSize);
+            });
+        }
+
+        function renderPagination(total, pageNum, size) {
+            const totalPages = Math.ceil(total / size);
+            if (totalPages <= 1) {
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+            let html = '<ul class="pagination justify-content-center">';
+            html += `<li class="page-item ${pageNum <= 1 ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="searchHouses(${pageNum - 1})">上一页</a></li>`;
+            for (let i = 1; i <= totalPages; i++) {
+                html += `<li class="page-item ${i === pageNum ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="searchHouses(${i})">${i}</a></li>`;
+            }
+            html += `<li class="page-item ${pageNum >= totalPages ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="searchHouses(${pageNum + 1})">下一页</a></li>`;
+            html += '</ul>';
+            html += `<p class="text-center text-muted small">共 ${total} 条记录</p>`;
+            document.getElementById('pagination').innerHTML = html;
+        }
+
+        function resetFilter() {
+            document.getElementById('filterCity').value = '';
+            document.getElementById('filterMinPrice').value = '';
+            document.getElementById('filterMaxPrice').value = '';
+            document.getElementById('filterGuests').value = '';
+            document.getElementById('filterType').value = '';
+            document.getElementById('filterSort').value = 'rating_desc';
+            searchHouses(1);
+        }
+
+        function initNav() {
+            fetch('/api/user/current').then(r => r.json()).then(res => {
+                if (res.code === 200 && res.data) {
+                    const user = res.data;
+                    const navRight = document.getElementById('navRight');
+                    const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+                    let menuHtml = '<li class="nav-item dropdown">';
+                    menuHtml += '<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">';
+                    menuHtml += '<i class="bi bi-person-circle"></i> ' + user.nickname + ' (' + (roleMap[user.role] || user.role) + ')';
+                    menuHtml += '</a><ul class="dropdown-menu dropdown-menu-end">';
+                    if (user.role === 'ADMIN') {
+                        menuHtml += '<li><a class="dropdown-item" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>';
+                    }
+                    if (user.role === 'LANDLORD') {
+                        menuHtml += '<li><a class="dropdown-item" href="/house/publish">发布房源</a></li>';
+                    }
+                    menuHtml += '<li><a class="dropdown-item" href="/order/list">我的订单</a></li>';
+                    menuHtml += '<li><hr class="dropdown-divider"></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>';
+                    menuHtml += '</ul></li>';
+                    navRight.innerHTML = menuHtml;
+                }
+            });
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.reload());
+        }
+    </script>
+</body>
+</html>

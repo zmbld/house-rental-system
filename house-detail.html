@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-house-heart"></i> 民宿预订平台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/house/list">房源列表</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight">
+                    <li class="nav-item"><a class="nav-link" href="/login">登录</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">注册</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-4" id="app">
+        <input type="hidden" id="houseId" th:value="${houseId}">
+        <div class="text-center py-5" id="loading">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">加载中...</p>
+        </div>
+
+        <div id="content" class="d-none">
+            <!-- 图片轮播 -->
+            <div id="imageCarousel" class="carousel slide mb-4 rounded overflow-hidden shadow" data-bs-ride="carousel">
+                <div class="carousel-indicators" id="carouselIndicators"></div>
+                <div class="carousel-inner" id="carouselInner" style="max-height:450px"></div>
+                <button class="carousel-control-prev" type="button" data-bs-target="#imageCarousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon"></span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#imageCarousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon"></span>
+                </button>
+            </div>
+
+            <div class="row">
+                <!-- 左侧详情 -->
+                <div class="col-lg-8">
+                    <h2 id="houseName" class="fw-bold"></h2>
+                    <p class="text-muted"><i class="bi bi-geo-alt"></i> <span id="houseCity"></span> · <span id="houseAddress"></span></p>
+                    <div class="d-flex flex-wrap gap-3 mb-3" id="houseTags"></div>
+                    <hr>
+                    <div class="d-flex gap-4 mb-3" id="houseInfo"></div>
+                    <hr>
+                    <h5 class="fw-bold">房源描述</h5>
+                    <p id="houseDesc" class="text-muted"></p>
+                    <h5 class="fw-bold">设施服务</h5>
+                    <div id="facilities" class="d-flex flex-wrap gap-2 mb-4"></div>
+                </div>
+
+                <!-- 右侧预订面板 -->
+                <div class="col-lg-4">
+                    <div class="card shadow-lg border-0 rounded-4 sticky-top" style="top:80px">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-primary fs-4 fw-bold">&yen;<span id="housePrice"></span> <small class="text-muted fs-6">/晚</small></span>
+                                <span class="text-warning fs-5"><i class="bi bi-star-fill"></i> <span id="houseRating"></span></span>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">入住日期</label>
+                                <input type="text" id="checkIn" class="form-control" placeholder="选择入住日期" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">退房日期</label>
+                                <input type="text" id="checkOut" class="form-control" placeholder="选择退房日期" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">入住人姓名</label>
+                                <input type="text" id="guestName" class="form-control" placeholder="请输入入住人姓名">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">入住人手机号</label>
+                                <input type="text" id="guestPhone" class="form-control" placeholder="请输入手机号">
+                            </div>
+                            <div id="bookingInfo" class="d-none">
+                                <hr>
+                                <div class="d-flex justify-content-between">
+                                    <span>&yen;<span id="bPrice"></span> × <span id="bNights"></span>晚</span>
+                                    <span class="fw-bold">&yen;<span id="bTotal"></span></span>
+                                </div>
+                                <hr>
+                            </div>
+                            <button id="bookBtn" class="btn btn-danger w-100 btn-lg" onclick="bookHouse()" disabled>请选择日期</button>
+                            <p id="bookMsg" class="text-muted text-center small mt-2"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 房态日历 -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-calendar3"></i> 房态日历</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3" id="calNav"></div>
+                    <div class="row row-cols-7 g-1" id="calGrid"></div>
+                </div>
+            </div>
+
+            <!-- 评价区域 -->
+            <div class="card shadow-sm mt-4" id="commentSection">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots"></i> 住客评价</h5>
+                </div>
+                <div class="card-body">
+                    <div id="commentList"><p class="text-muted">暂无评价</p></div>
+                    <hr>
+                    <div id="commentFormBox">
+                        <h6>我要评价</h6>
+                        <div id="commentHint" class="text-muted small mb-2" style="display:none;">
+                            <i class="bi bi-info-circle"></i> <span id="commentHintText"></span>
+                        </div>
+                        <form id="commentForm" onsubmit="submitComment(event)" style="display:none;">
+                            <input type="hidden" id="commentHouseId">
+                            <div class="mb-2">
+                                <label class="form-label">选择入住订单</label>
+                                <select id="commentOrderId" class="form-select" required>
+                                    <option value="">请选择已完成订单</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">评分</label>
+                                <select id="commentRating" class="form-select" style="width:160px" required>
+                                    <option value="">请选择</option>
+                                    <option value="5">★★★★★ 非常棒</option>
+                                    <option value="4">★★★★☆ 很好</option>
+                                    <option value="3">★★★☆☆ 一般</option>
+                                    <option value="2">★★☆☆☆ 较差</option>
+                                    <option value="1">★☆☆☆☆ 很差</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">评价内容 <small class="text-muted">(5-500 字)</small></label>
+                                <textarea id="commentContent" class="form-control" rows="3" minlength="5" maxlength="500"
+                                          placeholder="分享您的入住体验..." required></textarea>
+                                <div class="d-flex justify-content-between small mt-1">
+                                    <span class="text-muted" id="commentWarn"></span>
+                                    <span class="text-muted"><span id="commentCount">0</span> / 500</span>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">提交评价</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+
+    </footer>
+
+    <script>
+        const houseId = document.getElementById('houseId').value;
+        let houseData = null;
+        let checkInDate = null, checkOutDate = null;
+        let calYear = new Date().getFullYear(), calMonth = new Date().getMonth() + 1;
+        // 不可预订日期（已订 BOOKED + 已封锁 BLOCKED），加载后供 Flatpickr 提前禁用
+        let disabledDates = [];
+
+        initNav();
+        // 先加载禁用日期，再初始化日期选择器（避免用户选了不可订日期才报错）
+        fetchDisabledDates().then(() => {
+            loadDetail();
+            loadCalendar();
+        });
+
+        // 加载未来 6 个月的不可预订日期
+        function fetchDisabledDates() {
+            return fetch('/api/house/disabled-dates/' + houseId + '?months=6')
+                .then(r => r.json())
+                .then(res => {
+                    if (res.code === 200 && Array.isArray(res.data)) {
+                        disabledDates = res.data;
+                    }
+                })
+                .catch(err => console.warn('加载禁用日期失败:', err));
+        }
+
+        function loadDetail() {
+            fetch('/api/house/detail/' + houseId).then(r => r.json()).then(res => {
+                if (res.code !== 200) { alert('房源不存在'); return; }
+                houseData = res.data.house;
+                const h = houseData;
+                document.getElementById('loading').classList.add('d-none');
+                document.getElementById('content').classList.remove('d-none');
+
+                // 基本信息
+                document.getElementById('houseName').textContent = h.name;
+                document.getElementById('houseCity').textContent = h.city;
+                document.getElementById('houseAddress').textContent = h.address;
+                document.getElementById('housePrice').textContent = h.price;
+                document.getElementById('houseRating').textContent = h.rating || '暂无';
+                document.getElementById('houseDesc').textContent = h.description || '暂无描述';
+
+                // 房型/面积/人数标签
+                const typeMap = {WHOLE:'整套', PRIVATE:'独立房间', SHARED:'合住房间'};
+                document.getElementById('houseTags').innerHTML = `
+                    <span class="badge bg-primary p-2">${typeMap[h.houseType] || h.houseType}</span>
+                    <span class="badge bg-secondary p-2">${h.area}m²</span>
+                    <span class="badge bg-info p-2">可住${h.maxGuests}人</span>
+                `;
+                document.getElementById('houseInfo').innerHTML = `
+                    <div class="text-center"><i class="bi bi-house fs-3 text-primary"></i><br><small>${typeMap[h.houseType] || h.houseType}</small></div>
+                    <div class="text-center"><i class="bi bi-arrows-angle-expand fs-3 text-primary"></i><br><small>${h.area || '-'}m²</small></div>
+                    <div class="text-center"><i class="bi bi-people fs-3 text-primary"></i><br><small>${h.maxGuests}人</small></div>
+                `;
+
+                // 设施
+                const facEl = document.getElementById('facilities');
+                if (h.facilities) {
+                    facEl.innerHTML = h.facilities.split(',').map(f =>
+                        `<span class="badge bg-light text-dark border p-2"><i class="bi bi-check-circle text-success"></i> ${f.trim()}</span>`
+                    ).join('');
+                }
+
+                // 图片轮播
+                const images = res.data.images;
+                const hasImages = images && images.length > 0;
+                const imgUrls = hasImages
+                    ? images.map(i => i.imageUrl)
+                    : ['https://picsum.photos/800/450?random=' + houseId];
+                document.getElementById('carouselIndicators').innerHTML = imgUrls.map((_, i) =>
+                    `<button type="button" data-bs-target="#imageCarousel" data-bs-slide-to="${i}" ${i === 0 ? 'class="active"' : ''}></button>`
+                ).join('');
+                document.getElementById('carouselInner').innerHTML = imgUrls.map((url, i) =>
+                    `<div class="carousel-item ${i === 0 ? 'active' : ''}">
+                        <img src="${url}" class="d-block w-100" style="height:450px;object-fit:cover" alt="房源图片${i+1}">
+                    </div>`
+                ).join('');
+                if (!hasImages) {
+                    document.getElementById('imageCarousel').style.display = 'none';
+                }
+
+                // 初始化日期选择器
+                initDatePickers();
+
+                loadComments();
+            });
+        }
+
+        function initDatePickers() {
+            // 提前禁用已订/封锁日期，用户无法选中这些日期，无需提交后才报错
+            flatpickr("#checkIn", {
+                locale: "zh",
+                minDate: "today",
+                dateFormat: "Y-m-d",
+                disable: disabledDates,
+                onChange: function(selectedDates, dateStr) {
+                    checkInDate = dateStr;
+                    document.getElementById('checkOut').value = '';
+                    document.getElementById('bookBtn').disabled = true;
+                    document.getElementById('bookMsg').textContent = '请选择退房日期';
+                    // 更新checkOut的最小日期
+                    if (window.checkOutPicker) window.checkOutPicker.set('minDate', addDays(dateStr, 1));
+                    // 重置 checkOut 的禁用范围，排除已订日期
+                    if (window.checkOutPicker) window.checkOutPicker.set('disable', disabledDates);
+                }
+            });
+            const checkOutPicker = flatpickr("#checkOut", {
+                locale: "zh",
+                minDate: addDays(new Date(), 1),
+                dateFormat: "Y-m-d",
+                disable: disabledDates,
+                onChange: function(selectedDates, dateStr) {
+                    checkOutDate = dateStr;
+                    if (checkInDate && checkOutDate) {
+                        const nights = (new Date(checkOutDate) - new Date(checkInDate)) / (1000*60*60*24);
+                        if (nights <= 0) {
+                            document.getElementById('bookBtn').disabled = true;
+                            document.getElementById('bookMsg').textContent = '退房日期必须晚于入住日期';
+                            return;
+                        }
+                        // 二次校验中间不能有被预订的日期
+                        if (rangeHasDisabled(checkInDate, checkOutDate)) {
+                            document.getElementById('bookBtn').disabled = true;
+                            document.getElementById('bookMsg').textContent = '所选日期范围内存在已订/封锁日期，请重新选择';
+                            return;
+                        }
+                        document.getElementById('bookBtn').disabled = false;
+                        document.getElementById('bookingInfo').classList.remove('d-none');
+                        document.getElementById('bPrice').textContent = houseData.price;
+                        document.getElementById('bNights').textContent = nights;
+                        document.getElementById('bTotal').textContent = (houseData.price * nights).toFixed(2);
+                        document.getElementById('bookMsg').textContent = '共 ' + nights + ' 晚，总价 ¥' + (houseData.price * nights).toFixed(2);
+                    }
+                }
+            });
+            // 保存引用
+            window.checkOutPicker = checkOutPicker;
+        }
+
+        function addDays(dateStr, days) {
+            const d = typeof dateStr === 'string' ? new Date(dateStr) : new Date(dateStr.getTime() + days * 86400000);
+            if (typeof dateStr === 'string') d.setDate(d.getDate() + days);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + dd;
+        }
+
+        // 判断日期范围内是否包含禁用日期
+        function rangeHasDisabled(startStr, endStr) {
+            if (!startStr || !endStr) return false;
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const ds = y + '-' + m + '-' + dd;
+                if (disabledDates.indexOf(ds) !== -1) return true;
+            }
+            return false;
+        }
+
+        function loadCalendar() {
+            fetch(`/api/house/calendar/${houseId}?year=${calYear}&month=${calMonth}`).then(r => r.json()).then(res => {
+                if (res.code !== 200) return;
+                const data = res.data;
+                const weekdays = ['日','一','二','三','四','五','六'];
+                document.getElementById('calNav').innerHTML = `
+                    <button class="btn btn-outline-primary btn-sm" onclick="changeCalMonth(-1)"><i class="bi bi-chevron-left"></i></button>
+                    <h6 class="mb-0">${calYear}年${calMonth}月</h6>
+                    <button class="btn btn-outline-primary btn-sm" onclick="changeCalMonth(1)"><i class="bi bi-chevron-right"></i></button>
+                `;
+                let grid = weekdays.map(w => `<div class="col text-center fw-bold small py-2 bg-light rounded">${w}</div>`).join('');
+                // 补全月初空白格
+                const firstDay = new Date(calYear, calMonth-1, 1).getDay();
+                for (let i = 0; i < firstDay; i++) grid += '<div class="col"></div>';
+                data.forEach(item => {
+                    const d = new Date(item.date);
+                    const day = d.getDate();
+                    const status = item.status;
+                    let style = '';
+                    if (status === 'BOOKED') style = 'bg-danger text-white';
+                    else if (status === 'BLOCKED') style = 'bg-secondary text-white';
+                    else style = 'bg-success text-white';
+                    const extra = item.specialPrice ? `<br><small class="fs-xs">¥${item.specialPrice}</small>` : '';
+                    grid += `<div class="col text-center py-2 rounded ${style}" style="cursor:default;font-size:14px">
+                        ${day}<br><small>${status === 'BOOKED' ? '已订' : status === 'BLOCKED' ? '封锁' : '可订'}</small>${extra}
+                    </div>`;
+                });
+                document.getElementById('calGrid').innerHTML = grid;
+            });
+        }
+
+        function changeCalMonth(delta) {
+            calMonth += delta;
+            if (calMonth < 1) { calMonth = 12; calYear--; }
+            if (calMonth > 12) { calMonth = 1; calYear++; }
+            loadCalendar();
+        }
+
+        function bookHouse() {
+            if (!checkInDate || !checkOutDate) return;
+            // 前端二次校验：避免后端才报错
+            if (rangeHasDisabled(checkInDate, checkOutDate)) {
+                alert('所选日期范围内存在已订/封锁日期，请重新选择');
+                return;
+            }
+            const guestName = document.getElementById('guestName').value.trim();
+            const guestPhone = document.getElementById('guestPhone').value.trim();
+            if (!guestName) { alert('请填写入住人姓名'); return; }
+            if (!guestPhone) { alert('请填写入住人手机号'); return; }
+
+            const nights = (new Date(checkOutDate) - new Date(checkInDate)) / (1000*60*60*24);
+            const totalPrice = houseData.price * nights;
+
+            fetch('/api/order/create', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    houseId: houseId,
+                    checkInDate: checkInDate,
+                    checkOutDate: checkOutDate,
+                    guestName: guestName,
+                    guestPhone: guestPhone,
+                    totalPrice: totalPrice
+                })
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    alert('预订成功！订单号：' + res.data.orderNo);
+                    location.href = '/order/list';
+                } else {
+                    alert(res.msg);
+                }
+            });
+        }
+
+        function loadComments() {
+            document.getElementById('commentHouseId').value = houseId;
+            // 1. 加载所有评论
+            fetch('/api/house/comments/' + houseId).then(r => r.json()).then(res => {
+                if (res.code === 200 && res.data && res.data.length > 0) {
+                    document.getElementById('commentList').innerHTML = res.data.map(c => `
+                        <div class="border-bottom pb-3 mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span class="fw-bold">用户${c.userId}</span>
+                                <span class="text-warning">${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)}</span>
+                            </div>
+                            <small class="text-muted">${new Date(c.createTime).toLocaleDateString()}</small>
+                            <p class="mt-2 mb-0">${c.content}</p>
+                            ${c.reply ? `<div class="bg-light rounded p-2 mt-2 ms-3"><small class="fw-bold text-primary">房东回复：</small>${c.reply}</div>` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('commentList').innerHTML = '<p class="text-muted">暂无评价</p>';
+                }
+            });
+            // 2. 加载当前用户的可评价订单，决定评价表单显示与否
+            fetch('/api/order/commentable/' + houseId).then(r => r.json()).then(res => {
+                const box = document.getElementById('commentFormBox');
+                const form = document.getElementById('commentForm');
+                const hint = document.getElementById('commentHint');
+                const hintText = document.getElementById('commentHintText');
+                // 未登录
+                fetch('/api/user/current').then(r => r.json()).then(ur => {
+                    if (ur.code !== 200 || !ur.data) {
+                        hintText.textContent = '请先登录后查看是否可评价';
+                        hint.style.display = 'block';
+                        form.style.display = 'none';
+                        return;
+                    }
+                    const user = ur.data;
+                    // 仅房客可评价（管理员/房东不允许评价自己的房源或别人房源）
+                    if (user.role !== 'TENANT') {
+                        hintText.textContent = '仅房客账号可以提交评价';
+                        hint.style.display = 'block';
+                        form.style.display = 'none';
+                        return;
+                    }
+                    if (res.code === 200 && res.data && res.data.length > 0) {
+                        const sel = document.getElementById('commentOrderId');
+                        sel.innerHTML = '<option value="">请选择已完成订单</option>' +
+                            res.data.map(o => `<option value="${o.orderId}">${o.orderNo}（${o.checkInDate} ~ ${o.checkOutDate}）</option>`).join('');
+                        hint.style.display = 'none';
+                        form.style.display = 'block';
+                    } else {
+                        hintText.textContent = '您还没有已完成的订单，无法评价（仅已入住并完成的订单可以评价）';
+                        hint.style.display = 'block';
+                        form.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        // 字数实时校验
+        document.addEventListener('input', function(e) {
+            if (e.target && e.target.id === 'commentContent') {
+                const len = e.target.value.length;
+                document.getElementById('commentCount').textContent = len;
+                const warn = document.getElementById('commentWarn');
+                if (len === 0) {
+                    warn.textContent = '';
+                } else if (len < 5) {
+                    warn.textContent = '还需输入 ' + (5 - len) + ' 字';
+                    warn.className = 'text-warning small';
+                } else if (len > 500) {
+                    warn.textContent = '超出 ' + (len - 500) + ' 字，将被拒绝';
+                    warn.className = 'text-danger small';
+                } else {
+                    warn.textContent = '字数合适';
+                    warn.className = 'text-success small';
+                }
+            }
+        });
+
+        function submitComment(e) {
+            e.preventDefault();
+            const orderId = document.getElementById('commentOrderId').value;
+            const rating = document.getElementById('commentRating').value;
+            const content = document.getElementById('commentContent').value;
+            if (!orderId) { alert('请选择入住订单'); return; }
+            if (!rating) { alert('请选择评分'); return; }
+            const trimmed = content.trim();
+            if (trimmed.length < 5) { alert('评价内容至少 5 个字'); return; }
+            if (trimmed.length > 500) { alert('评价内容最多 500 个字'); return; }
+            fetch('/api/comment/add', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({houseId: houseId, orderId: parseInt(orderId), rating: parseInt(rating), content: trimmed})
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    alert('评价成功');
+                    document.getElementById('commentContent').value = '';
+                    document.getElementById('commentCount').textContent = '0';
+                    document.getElementById('commentWarn').textContent = '';
+                    loadComments();
+                } else {
+                    alert(res.msg);
+                }
+            });
+        }
+
+        function initNav() {
+            fetch('/api/user/current').then(r => r.json()).then(res => {
+                if (res.code === 200 && res.data) {
+                    const user = res.data;
+                    const navRight = document.getElementById('navRight');
+                    const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+                    let menuHtml = '<li class="nav-item dropdown">';
+                    menuHtml += '<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">';
+                    menuHtml += '<i class="bi bi-person-circle"></i> ' + user.nickname + ' (' + (roleMap[user.role] || user.role) + ')';
+                    menuHtml += '</a><ul class="dropdown-menu dropdown-menu-end">';
+                    if (user.role === 'ADMIN') {
+                        menuHtml += '<li><a class="dropdown-item" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>';
+                    }
+                    if (user.role === 'LANDLORD') {
+                        menuHtml += '<li><a class="dropdown-item" href="/house/publish">发布房源</a></li>';
+                    }
+                    menuHtml += '<li><a class="dropdown-item" href="/order/list">我的订单</a></li>';
+                    menuHtml += '<li><hr class="dropdown-divider"></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>';
+                    menuHtml += '</ul></li>';
+                    navRight.innerHTML = menuHtml;
+                } else {
+                    // 未登录时预订按钮提示登录
+                    document.getElementById('bookBtn').onclick = function() { location.href = '/login'; };
+                    document.getElementById('bookMsg').textContent = '请先登录后进行预订';
+                }
+            });
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.reload());
+        }
+    </script>
+</body>
+</html>

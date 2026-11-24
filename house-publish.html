@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/head :: head"></head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-house-heart"></i> 民宿预订平台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">首页</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/house/list">房源列表</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/house/publish">发布房源</a></li>
+                </ul>
+                <ul class="navbar-nav" id="navRight">
+                    <li class="nav-item"><a class="nav-link" href="/login">登录</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">注册</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0"><i class="bi bi-plus-circle"></i> 发布房源</h4>
+                    </div>
+                    <div class="card-body p-4">
+                        <div id="errorMsg" class="alert alert-danger d-none"></div>
+                        <form id="publishForm" onsubmit="submitHouse(event)">
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">房源名称 <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="name" placeholder="例: 西湖畔花园别墅" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">所在城市 <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="city" placeholder="例: 杭州" required>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">详细地址 <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="address" placeholder="请输入详细地址" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">房型 <span class="text-danger">*</span></label>
+                                    <select class="form-select" name="houseType" required>
+                                        <option value="">请选择</option>
+                                        <option value="WHOLE">整套</option>
+                                        <option value="PRIVATE">独立房间</option>
+                                        <option value="SHARED">合住房间</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">面积 (m²)</label>
+                                    <input type="number" class="form-control" name="area" placeholder="例: 60" step="0.1" min="1">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">最大入住人数 <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" name="maxGuests" placeholder="例: 4" required min="1">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">每晚价格 (元) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" name="price" placeholder="例: 388" required min="0" step="0.01">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">封面图片URL</label>
+                                    <input type="url" class="form-control" name="coverImage" placeholder="https://...">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">配套设施 (逗号分隔)</label>
+                                    <input type="text" class="form-control" name="facilities" placeholder="例: WiFi,空调,洗衣机,厨房,停车位">
+                                    <small class="text-muted">请输入设施名称，用逗号分隔</small>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">房源描述 <span class="text-danger">*</span></label>
+                                    <textarea class="form-control" name="description" rows="5" placeholder="请详细描述您的房源特色、周边环境等信息..." required></textarea>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-center">
+                                <button type="submit" class="btn btn-primary btn-lg px-5">
+                                    <i class="bi bi-upload"></i> 提交发布
+                                </button>
+                                <a href="/" class="btn btn-outline-secondary btn-lg px-4 ms-2">取消</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+
+    </footer>
+
+    <script>
+        initNav();
+
+        function submitHouse(e) {
+            e.preventDefault();
+            const form = e.target;
+            const data = {
+                name: form.name.value.trim(),
+                city: form.city.value.trim(),
+                address: form.address.value.trim(),
+                houseType: form.houseType.value,
+                area: form.area.value ? parseFloat(form.area.value) : null,
+                maxGuests: parseInt(form.maxGuests.value),
+                price: parseFloat(form.price.value),
+                coverImage: form.coverImage.value.trim() || null,
+                facilities: form.facilities.value.trim() || null,
+                description: form.description.value.trim()
+            };
+
+            fetch('/api/house/save', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.json()).then(res => {
+                if (res.code === 200) {
+                    alert('发布成功！等待管理员审核后即可上架。');
+                    location.href = '/';
+                } else {
+                    const err = document.getElementById('errorMsg');
+                    err.textContent = res.msg;
+                    err.classList.remove('d-none');
+                }
+            });
+        }
+
+        function initNav() {
+            fetch('/api/user/current').then(r => r.json()).then(res => {
+                if (res.code === 200 && res.data) {
+                    const user = res.data;
+                    const navRight = document.getElementById('navRight');
+                    const roleMap = {ADMIN:'管理员',LANDLORD:'房东',TENANT:'房客'};
+                    let menuHtml = '<li class="nav-item dropdown">';
+                    menuHtml += '<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">';
+                    menuHtml += '<i class="bi bi-person-circle"></i> ' + user.nickname + ' (' + (roleMap[user.role] || user.role) + ')';
+                    menuHtml += '</a><ul class="dropdown-menu dropdown-menu-end">';
+                    if (user.role === 'ADMIN') {
+                        menuHtml += '<li><a class="dropdown-item" href="/admin"><i class="bi bi-shield-lock"></i> 管理后台</a></li>';
+                    }
+                    menuHtml += '<li><a class="dropdown-item" href="/order/list">我的订单</a></li>';
+                    menuHtml += '<li><hr class="dropdown-divider"></li>';
+                    menuHtml += '<li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>';
+                    menuHtml += '</ul></li>';
+                    navRight.innerHTML = menuHtml;
+                } else {
+                    location.href = '/login';
+                }
+            });
+        }
+
+        function logout() {
+            fetch('/api/user/logout').then(() => location.reload());
+        }
+    </script>
+</body>
+</html>
